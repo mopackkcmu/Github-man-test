@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Man Runner</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #222;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+        canvas {
+            border: 2px solid #555;
+            background-color: #333;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #game-ui {
+            position: absolute;
+            top: 20px;
+            text-align: center;
+            width: 100%;
+            pointer-events: none;
+        }
+        #p-score {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        #p-message {
+            font-size: 18px;
+            color: #aaa;
+            margin-top: 5px;
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #fff;
+        }
+        button {
+            background-color: #fff;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+            font-family: inherit;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #ddd;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-ui">
+        <div id="p-score">Score: 0</div>
+        <div id="p-message">Press SPACE to Jump</div>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+    <div id="game-over">
+        <h1>GAME OVER</h1>
+        <p>Final Score: <span id="final-score">0</span></p>
+        <button onclick="resetGame()">Play Again</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('p-score');
+        const gameOverScreen = document.getElementById('game-over');
+        const finalScoreElement = document.getElementById('final-score');
+
+        // Game Constants
+        const GRAVITY = 0.6;
+        const JUMP_FORCE = -12;
+        const GROUND_HEIGHT = 50;
+        const GAME_SPEED_INITIAL = 5;
+        
+        // Game State
+        let gameSpeed = GAME_SPEED_INITIAL;
+        let score = 0;
+        let isGameOver = false;
+        let frameCount = 0;
+        let animationId;
+
+        // Player
+        const player = {
+            x: 50,
+            y: 0,
+            width: 30,
+            height: 50,
+            dy: 0,
+            color: '#00ffcc', // Cyan
+            isGrounded: false,
+            
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Simple pixel art face
+                ctx.fillStyle = '#000';
+                ctx.fillRect(this.x + 18, this.y + 10, 4, 4); // Eye
+                ctx.fillRect(this.x + 22, this.y + 25, 6, 2); // Mouth
+            },
+            
+            update() {
+                // Apply Gravity
+                this.dy += GRAVITY;
+                this.y += this.dy;
+
+                // Ground Collision
+                const groundY = canvas.height - GROUND_HEIGHT - this.height;
+                if (this.y > groundY) {
+                    this.y = groundY;
+                    this.dy = 0;
+                    this.isGrounded = true;
+                } else {
+                    this.isGrounded = false;
+                }
+            },
+            
+            jump() {
+                if (this.isGrounded) {
+                    this.dy = JUMP_FORCE;
+                    this.isGrounded = false;
+                }
+            }
+        };
+
+        // Obstacles
+        let obstacles = [];
+        
+        class Obstacle {
+            constructor() {
+                this.width = 30 + Math.random() * 20;
+                this.height = 30 + Math.random() * 30;
+                this.x = canvas.width;
+                this.y = canvas.height - GROUND_HEIGHT - this.height;
+                this.color = '#ff4444'; // Red
+                this.passed = false;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Detail
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(this.x + 4, this.y + 4, this.width - 8, this.height - 8);
+            }
+
+            update() {
+                this.x -= gameSpeed;
+            }
+        }
+
+        function spawnObstacle() {
+            obstacles.push(new Obstacle());
+        }
+
+        // Input Handling
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                if (isGameOver) {
+                    resetGame();
+                } else {
+                    player.jump();
+                }
+            }
+        });
+
+        // Game Loop
+        function gameLoop() {
+            if (isGameOver) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Ground
+            ctx.fillStyle = '#666';
+            ctx.fillRect(0, canvas.height - GROUND_HEIGHT, canvas.width, GROUND_HEIGHT);
+            ctx.fillStyle = '#555'; // Ground detail
+            ctx.fillRect(0, canvas.height - GROUND_HEIGHT + 5, canvas.width, 2);
+
+            // Update & Draw Player
+            player.update();
+            player.draw();
+
+            // Obstacle Logic
+            if (frameCount % 100 === 0) { // Approx every 1.6 seconds at 60fps
+                spawnObstacle();
+            }
+            
+            // Randomly vary spawn rate slightly to make it less predictable
+            if (Math.random() < 0.005 && frameCount > 200) {
+                 spawnObstacle();
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let obs = obstacles[i];
+                obs.update();
+                obs.draw();
+
+                // Collision Detection
+                if (
+                    player.x < obs.x + obs.width &&
+                    player.x + player.width > obs.x &&
+                    player.y < obs.y + obs.height &&
+                    player.y + player.height > obs.y
+                ) {
+                    gameOver();
+                }
+
+                // Score Update
+                if (!obs.passed && player.x > obs.x + obs.width) {
+                    score++;
+                    scoreElement.innerText = `Score: ${score}`;
+                    obs.passed = true;
+                    // Slightly increase speed
+                    if(score % 5 === 0) gameSpeed += 0.5;
+                }
+
+                // Remove off-screen obstacles
+                if (obs.x + obs.width < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+
+            frameCount++;
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            isGameOver = true;
+            gameOverScreen.style.display = 'block';
+            finalScoreElement.innerText = score;
+            cancelAnimationFrame(animationId);
+        }
+
+        function resetGame() {
+            isGameOver = false;
+            score = 0;
+            gameSpeed = GAME_SPEED_INITIAL;
+            frameCount = 0;
+            obstacles = [];
+            player.y = canvas.height - GROUND_HEIGHT - player.height;
+            player.dy = 0;
+            scoreElement.innerText = `Score: 0`;
+            gameOverScreen.style.display = 'none';
+            gameLoop();
+        }
+
+        // Start Game
+        resetGame();
+
+    </script>
+</body>
+</html>
