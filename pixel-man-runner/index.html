@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,11 +18,13 @@
             font-family: 'Courier New', Courier, monospace;
             overflow: hidden;
         }
+
         canvas {
             border: 2px solid #555;
             background-color: #333;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
         }
+
         #game-ui {
             position: absolute;
             top: 20px;
@@ -29,15 +32,18 @@
             width: 100%;
             pointer-events: none;
         }
+
         #p-score {
             font-size: 24px;
             font-weight: bold;
         }
+
         #p-message {
             font-size: 18px;
             color: #aaa;
             margin-top: 5px;
         }
+
         #game-over {
             position: absolute;
             top: 50%;
@@ -50,6 +56,7 @@
             border-radius: 8px;
             border: 1px solid #fff;
         }
+
         button {
             background-color: #fff;
             color: #000;
@@ -61,16 +68,18 @@
             font-family: inherit;
             font-weight: bold;
         }
+
         button:hover {
             background-color: #ddd;
         }
     </style>
 </head>
+
 <body>
 
     <div id="game-ui">
         <div id="p-score">Score: 0</div>
-        <div id="p-message">Press SPACE to Jump</div>
+        <div id="p-message">Press SPACE to Jump/Double Jump | Hold UP for Jetpack</div>
     </div>
 
     <canvas id="gameCanvas" width="800" height="400"></canvas>
@@ -91,9 +100,10 @@
         // Game Constants
         const GRAVITY = 0.6;
         const JUMP_FORCE = -12;
+        const JETPACK_FORCE = 0.9; // Counteracts gravity (0.6) and adds upward pull
         const GROUND_HEIGHT = 50;
         const GAME_SPEED_INITIAL = 5;
-        
+
         // Game State
         let gameSpeed = GAME_SPEED_INITIAL;
         let score = 0;
@@ -108,22 +118,47 @@
             width: 30,
             height: 50,
             dy: 0,
-            color: '#00ffcc', // Cyan
+            originalColor: '#00ffcc', // Cyan
+            baseColor: '#2ecc71', // Green (Normal state)
+            activeColor: '#00ffcc', // Cyan (Double Jump/Jetpack)
             isGrounded: false,
-            
+            jumpCount: 0,
+            maxJumps: 2,
+            isJetpacking: false,
+
             draw() {
-                ctx.fillStyle = this.color;
+                // Change color logic: Cyan if flying or double jumping
+                if (this.isJetpacking || (!this.isGrounded && this.jumpCount > 0)) {
+                    ctx.fillStyle = this.activeColor;
+                } else {
+                    ctx.fillStyle = this.baseColor;
+                }
+
                 ctx.fillRect(this.x, this.y, this.width, this.height);
-                
+
                 // Simple pixel art face
                 ctx.fillStyle = '#000';
                 ctx.fillRect(this.x + 18, this.y + 10, 4, 4); // Eye
                 ctx.fillRect(this.x + 22, this.y + 25, 6, 2); // Mouth
+
+                // Jetpack visuals
+                if (this.isJetpacking) {
+                    ctx.fillStyle = '#f39c12'; // Flame color
+                    ctx.fillRect(this.x + 5, this.y + this.height, 10, 10);
+                    ctx.fillRect(this.x + 15, this.y + this.height, 10, 10);
+                }
             },
-            
+
             update() {
-                // Apply Gravity
-                this.dy += GRAVITY;
+                // Apply Jetpack Force or Gravity
+                if (this.isJetpacking) {
+                    this.dy -= JETPACK_FORCE;
+                    // Cap upward speed for better control
+                    if (this.dy < -6) this.dy = -6;
+                } else {
+                    this.dy += GRAVITY;
+                }
+
                 this.y += this.dy;
 
                 // Ground Collision
@@ -132,22 +167,30 @@
                     this.y = groundY;
                     this.dy = 0;
                     this.isGrounded = true;
+                    this.jumpCount = 0; // Reset jumps on ground
                 } else {
                     this.isGrounded = false;
                 }
+
+                // Ceiling Collision (Optional, prevents flying off screen too easily)
+                if (this.y < 0) {
+                    this.y = 0;
+                    this.dy = 0;
+                }
             },
-            
+
             jump() {
-                if (this.isGrounded) {
+                if (this.jumpCount < this.maxJumps) {
                     this.dy = JUMP_FORCE;
                     this.isGrounded = false;
+                    this.jumpCount++;
                 }
             }
         };
 
         // Obstacles
         let obstacles = [];
-        
+
         class Obstacle {
             constructor() {
                 this.width = 30 + Math.random() * 20;
@@ -161,7 +204,7 @@
             draw() {
                 ctx.fillStyle = this.color;
                 ctx.fillRect(this.x, this.y, this.width, this.height);
-                
+
                 // Detail
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 2;
@@ -186,6 +229,15 @@
                     player.jump();
                 }
             }
+            if (e.code === 'ArrowUp') {
+                player.isJetpacking = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowUp') {
+                player.isJetpacking = false;
+            }
         });
 
         // Game Loop
@@ -208,10 +260,10 @@
             if (frameCount % 100 === 0) { // Approx every 1.6 seconds at 60fps
                 spawnObstacle();
             }
-            
+
             // Randomly vary spawn rate slightly to make it less predictable
             if (Math.random() < 0.005 && frameCount > 200) {
-                 spawnObstacle();
+                spawnObstacle();
             }
 
             for (let i = obstacles.length - 1; i >= 0; i--) {
@@ -235,7 +287,7 @@
                     scoreElement.innerText = `Score: ${score}`;
                     obs.passed = true;
                     // Slightly increase speed
-                    if(score % 5 === 0) gameSpeed += 0.5;
+                    if (score % 5 === 0) gameSpeed += 0.5;
                 }
 
                 // Remove off-screen obstacles
@@ -273,4 +325,5 @@
 
     </script>
 </body>
+
 </html>
